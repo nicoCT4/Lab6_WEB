@@ -12,13 +12,15 @@ import (
 
 //Estructura de un partido 
 type Match struct {
-	ID     int    `json:"id"`   
-	TeamA  string `json:"teamA"`
-	TeamB  string `json:"teamB"`
-	ScoreA int    `json:"scoreA"`
-	ScoreB int    `json:"scoreB"`
-	Date   string `json:"date"`
+	ID        int    `json:"id"`
+	HomeTeam  string `json:"homeTeam"`
+	AwayTeam  string `json:"awayTeam"`
+	ScoreA    int    `json:"scoreA"`
+	ScoreB    int    `json:"scoreB"`
+	MatchDate string `json:"matchDate"`
 }
+
+
 
 //Lista de partidos
 var matches = []Match{}
@@ -84,6 +86,21 @@ func deleteMatch(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
+
+// Middleware para permitir CORS (evita el error de fetch desde otro puerto como el 3000)
+func enableCors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*") // Puedes especificar solo "http://localhost:3000" si quieres
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 //funcion principal
 func main() {
 	router := mux.NewRouter()
@@ -96,7 +113,7 @@ func main() {
 	router.HandleFunc("/api/matches/{id}", deleteMatch).Methods("DELETE")
 
 	//imprimir mensaje en consola
-	fmt.Println("Servidor corriendo en el puerto 9090")
+	fmt.Println("Servidor corriendo en el puerto 8080")
 	//iniciar el servidor
-	log.Fatal(http.ListenAndServe(":9090", router))
+	log.Fatal(http.ListenAndServe(":8080", enableCors(router)))
 }
