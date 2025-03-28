@@ -1,0 +1,5 @@
+# Ignorar binarios
+/main
+
+# Ignorar docker-compose real (solo se sube el .example)
+docker-compose.yml
