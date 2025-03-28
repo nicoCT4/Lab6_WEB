@@ -83,6 +83,6 @@ func main() {
 	router.HandleFunc("/api/matches/{id}", updateMatch).Methods("PUT")
 	router.HandleFunc("/api/matches/{id}", deleteMatch).Methods("DELETE")
 
-	fmt.Println("Servidor corriendo en el puerto 9090")
-	log.Fatal(http.ListenAndServe(":9090", router))
+	fmt.Println("Servidor corriendo en el puerto 8080")
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
