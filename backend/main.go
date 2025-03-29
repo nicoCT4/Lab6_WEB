@@ -46,12 +46,12 @@ func connectToDB() {
 
 //Estructura de un partido 
 type Match struct {
-	ID        int    
-	HomeTeam  string 
-	AwayTeam  string 
-	ScoreA    int    
-	ScoreB    int    
-	MatchDate string 
+	ID        int    `json:"id"`
+	HomeTeam  string `json:"homeTeam"`
+	AwayTeam  string `json:"awayTeam"`
+	ScoreA    int    `json:"scoreA"`
+	ScoreB    int    `json:"scoreB"`
+	MatchDate string `json:"matchDate"`
 }
 
 //crear un partido
@@ -77,7 +77,8 @@ func createMatch(w http.ResponseWriter, r *http.Request) {
 func getMatches(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query("SELECT id, home_team, away_team, score_a, score_b, match_date FROM matches")
 	if err != nil {
-		log.Fatal("Error al obtener los partidos:", err)
+		http.Error(w, "Error al obtener los partidos: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 	defer rows.Close()
 
@@ -86,15 +87,24 @@ func getMatches(w http.ResponseWriter, r *http.Request) {
 		var match Match
 		err := rows.Scan(&match.ID, &match.HomeTeam, &match.AwayTeam, &match.ScoreA, &match.ScoreB, &match.MatchDate)
 		if err != nil {
-			log.Fatal("Error al escanear partido:", err)
+			http.Error(w, "Error al escanear partido: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
+		
+		 // Formatear fecha de manera segura
+		if len(match.MatchDate) >= 10 {
+			match.MatchDate = match.MatchDate[:10]
+		}
+		
 		matches = append(matches, match)
 	}
 
 	if err = rows.Err(); err != nil {
-		log.Fatal("Error al leer filas:", err)
+		http.Error(w, "Error al leer filas: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(matches)
 }
 
@@ -102,20 +112,33 @@ func getMatches(w http.ResponseWriter, r *http.Request) {
 //obtener un partido por su id
 func getMatchByID(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	id, _ := strconv.Atoi(params["id"])
+	id, err := strconv.Atoi(params["id"])
+	if err != nil {
+		http.Error(w, "ID de partido inválido", http.StatusBadRequest)
+		return
+	}
 
 	var match Match
-	err := db.QueryRow("SELECT id, home_team, away_team, score_a, score_b, match_date FROM matches WHERE id = $1", id).
-		Scan(&match.ID, &match.HomeTeam, &match.AwayTeam, &match.ScoreA, &match.ScoreB, &match.MatchDate)
+	err = db.QueryRow(
+		"SELECT id, home_team, away_team, score_a, score_b, match_date FROM matches WHERE id = $1", 
+		id,
+	).Scan(&match.ID, &match.HomeTeam, &match.AwayTeam, &match.ScoreA, &match.ScoreB, &match.MatchDate)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)
 			return
 		}
-		log.Fatal("Error al obtener el partido:", err)
+		http.Error(w, "Error al obtener el partido: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
+	// Formatear fecha de manera segura
+	if len(match.MatchDate) >= 10 {
+		match.MatchDate = match.MatchDate[:10]
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(match)
 }
 
@@ -159,7 +182,137 @@ func deleteMatch(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Partido eliminado"})
 }
 
+func registerGoal(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	matchID, err := strconv.Atoi(params["id"])
+	if err != nil {
+		http.Error(w, "ID de partido inválido", http.StatusBadRequest)
+		return
+	}
 
+	// Decodificar el cuerpo de la petición
+	var request struct {
+		 TeamID int `json:"teamId"` // ID del equipo que anotó
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Datos inválidos", http.StatusBadRequest)
+		return
+	}
+
+	// Determinar si es gol del equipo local o visitante
+	var isHomeTeam bool
+	err = db.QueryRow(
+		"SELECT $1 = home_team FROM matches WHERE id = $2", 
+		request.TeamID, matchID,
+	).Scan(&isHomeTeam)
+	if err != nil {
+		http.Error(w, "Error al verificar equipos", http.StatusInternalServerError)
+		return
+}
+
+	// Actualizar el marcador
+	var updateQuery string
+	if isHomeTeam {
+		updateQuery = "UPDATE matches SET score_a = score_a + 1 WHERE id = $1"
+	} else {
+		updateQuery = "UPDATE matches SET score_b = score_b + 1 WHERE id = $1"
+	}
+
+	_, err = db.Exec(updateQuery, matchID)
+	if err != nil {
+		http.Error(w, "Error al actualizar marcador", http.StatusInternalServerError)
+		return
+	}
+
+	// Registrar el gol en la tabla goals
+	_, err = db.Exec(
+		"INSERT INTO goals (match_id, team_id, goals) VALUES ($1, $2, 1)",
+		matchID, request.TeamID,
+	)
+	if err != nil {
+		http.Error(w, "Error al registrar gol", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Gol registrado correctamente"})
+}
+
+func registerCard(w http.ResponseWriter, r *http.Request, cardType string) {
+	params := mux.Vars(r)
+	matchID, err := strconv.Atoi(params["id"])
+	if err != nil {
+		http.Error(w, "ID de partido inválido", http.StatusBadRequest)
+		return
+	}
+
+	var request struct {
+		PlayerID int `json:"playerId"`
+		Minute   int `json:"minute"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Datos inválidos", http.StatusBadRequest)
+		return
+	}
+
+	// Registrar la tarjeta
+	_, err = db.Exec(
+		"INSERT INTO cards (player_id, match_id, card_type, card_time) VALUES ($1, $2, $3, $4)",
+		request.PlayerID, matchID, cardType, request.Minute,
+	)
+	if err != nil {
+		http.Error(w, "Error al registrar tarjeta", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": fmt.Sprintf("Tarjeta %s registrada", cardType)})
+}
+
+// Handlers específicos
+func registerYellowCard(w http.ResponseWriter, r *http.Request) {
+	registerCard(w, r, "yellow")
+}
+
+func registerRedCard(w http.ResponseWriter, r *http.Request) {
+	registerCard(w, r, "red")
+}
+
+func setExtraTime(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	matchID, err := strconv.Atoi(params["id"])
+	if err != nil {
+		http.Error(w, "ID de partido inválido", http.StatusBadRequest)
+		return
+	}
+
+	var request struct {
+		Minutes int `json:"minutes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Datos inválidos", http.StatusBadRequest)
+		return
+	}
+
+	// Actualizar en ambas tablas por consistencia
+	_, err = db.Exec("UPDATE matches SET extra_time = $1 WHERE id = $2", request.Minutes, matchID)
+	if err != nil {
+		http.Error(w, "Error al actualizar partido", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = db.Exec(
+		"INSERT INTO extra_time (match_id, time) VALUES ($1, $2) ON CONFLICT (match_id) DO UPDATE SET time = $2",
+		matchID, request.Minutes,
+	)
+	if err != nil {
+		http.Error(w, "Error al registrar tiempo extra", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": fmt.Sprintf("Tiempo extra establecido a %d minutos", request.Minutes)})
+}
 
 // Middleware para permitir CORS (evita el error de fetch desde otro puerto como el 3000)
 func enableCors(next http.Handler) http.Handler {
@@ -192,6 +345,10 @@ func main() {
 	router.HandleFunc("/api/matches", createMatch).Methods("POST")
 	router.HandleFunc("/api/matches/{id}", updateMatch).Methods("PUT")
 	router.HandleFunc("/api/matches/{id}", deleteMatch).Methods("DELETE")
+	router.HandleFunc("/api/matches/{id}/goals", registerGoal).Methods("PATCH")
+	router.HandleFunc("/api/matches/{id}/yellowcards", registerYellowCard).Methods("PATCH")
+	router.HandleFunc("/api/matches/{id}/redcards", registerRedCard).Methods("PATCH")
+	router.HandleFunc("/api/matches/{id}/extratime", setExtraTime).Methods("PATCH")
 
 	// Imprimir mensaje en consola
 	fmt.Println("Servidor corriendo en el puerto 8080")

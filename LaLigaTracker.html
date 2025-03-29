@@ -148,25 +148,27 @@
 
     // Función para mostrar los partidos en pantalla
     function displayMatches(matches) {
-      const matchesDiv = document.getElementById('matches');
-      matchesDiv.innerHTML = '';
-      if (matches.length === 0) {
-        matchesDiv.innerHTML = '<p>No se encontraron partidos.</p>';
-        return;
-      }
-      matches.forEach(match => {
-        const matchDiv = document.createElement('div');
-        matchDiv.className = 'match';
-        matchDiv.innerHTML = `
-          <p><strong>ID:</strong> ${match.id}</p>
-          <p><strong>Equipo Local:</strong> ${match.homeTeam}</p>
-          <p><strong>Equipo Visitante:</strong> ${match.awayTeam}</p>
-          <p><strong>Fecha:</strong> ${match.matchDate}</p>
-          <button onclick="deleteMatch(${match.id})">Eliminar Partido</button>
-          <button onclick="prepareUpdate(${match.id}, '${match.homeTeam}', '${match.awayTeam}', '${match.matchDate}')">Actualizar Partido</button>
-        `;
-        matchesDiv.appendChild(matchDiv);
-      });
+        const matchesDiv = document.getElementById('matches');
+        matchesDiv.innerHTML = '';
+        if (matches.length === 0) {
+            matchesDiv.innerHTML = '<p>No se encontraron partidos.</p>';
+            return;
+        }
+        matches.forEach(match => {
+            const matchDiv = document.createElement('div');
+            matchDiv.className = 'match';
+            matchDiv.innerHTML = `
+                <h3>Partido ID: ${match.id}</h3>
+                <p><strong>${match.homeTeam} ${match.scoreA || 0} - ${match.scoreB || 0} ${match.awayTeam}</strong></p>
+                <p>Fecha: ${match.matchDate}</p>
+                ${match.extraTime ? `<p>Tiempo extra: ${match.extraTime} minutos</p>` : ''}
+                <div class="match-actions">
+                    <button onclick="deleteMatch(${match.id})">Eliminar Partido</button>
+                    <button onclick="prepareUpdate(${match.id}, '${match.homeTeam}', '${match.awayTeam}', '${match.matchDate}')">Actualizar Partido</button>
+                </div>
+            `;
+            matchesDiv.appendChild(matchDiv);
+        });
     }
 
     // Función para crear un nuevo partido
@@ -271,67 +273,111 @@
     }
 
     async function registerGoal() {
-      const id = getPatchMatchId();
-      try {
-        const response = await fetch(`${apiBaseUrl}/matches/${id}/goals`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ /* Puedes enviar datos adicionales si es necesario */ })
-        });
-        if (!response.ok) throw new Error('Error al registrar gol');
-        alert('Gol registrado correctamente');
-        fetchMatches();
-      } catch (error) {
-        alert(error);
-      }
+        const id = document.getElementById('patchMatchId').value;
+        if (!id) {
+            alert('Por favor ingrese un ID de partido');
+            return;
+        }
+        
+        const teamId = prompt("Ingrese el ID del equipo que anotó (1 para local, 2 para visitante):");
+        if (!teamId) return;
+        
+        try {
+            const response = await fetch(`${apiBaseUrl}/matches/${id}/goals`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: parseInt(teamId) })
+            });
+            if (!response.ok) throw new Error(await response.text());
+            alert('Gol registrado correctamente');
+            fetchMatches();
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
     }
 
     async function registerYellowCard() {
-      const id = getPatchMatchId();
-      try {
-        const response = await fetch(`${apiBaseUrl}/matches/${id}/yellowcards`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ /* Puedes enviar datos adicionales si es necesario */ })
-        });
-        if (!response.ok) throw new Error('Error al registrar tarjeta amarilla');
-        alert('Tarjeta amarilla registrada correctamente');
-        fetchMatches();
-      } catch (error) {
-        alert(error);
-      }
+        const id = document.getElementById('patchMatchId').value;
+        if (!id) {
+            alert('Por favor ingrese un ID de partido');
+            return;
+        }
+        
+        const playerId = prompt("Ingrese el ID del jugador:");
+        if (!playerId) return;
+        
+        const minute = prompt("Minuto del partido:");
+        if (!minute) return;
+        
+        try {
+            const response = await fetch(`${apiBaseUrl}/matches/${id}/yellowcards`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    playerId: parseInt(playerId), 
+                    minute: parseInt(minute) 
+                })
+            });
+            if (!response.ok) throw new Error(await response.text());
+            alert('Tarjeta amarilla registrada');
+            fetchMatches();
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
     }
 
     async function registerRedCard() {
-      const id = getPatchMatchId();
-      try {
-        const response = await fetch(`${apiBaseUrl}/matches/${id}/redcards`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ /* Puedes enviar datos adicionales si es necesario */ })
-        });
-        if (!response.ok) throw new Error('Error al registrar tarjeta roja');
-        alert('Tarjeta roja registrada correctamente');
-        fetchMatches();
-      } catch (error) {
-        alert(error);
-      }
+        const id = document.getElementById('patchMatchId').value;
+        if (!id) {
+            alert('Por favor ingrese un ID de partido');
+            return;
+        }
+        
+        const playerId = prompt("Ingrese el ID del jugador:");
+        if (!playerId) return;
+        
+        const minute = prompt("Minuto del partido:");
+        if (!minute) return;
+        
+        try {
+            const response = await fetch(`${apiBaseUrl}/matches/${id}/redcards`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    playerId: parseInt(playerId), 
+                    minute: parseInt(minute) 
+                })
+            });
+            if (!response.ok) throw new Error(await response.text());
+            alert('Tarjeta roja registrada');
+            fetchMatches();
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
     }
 
     async function setExtraTime() {
-      const id = getPatchMatchId();
-      try {
-        const response = await fetch(`${apiBaseUrl}/matches/${id}/extratime`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ /* Puedes enviar datos adicionales si es necesario */ })
-        });
-        if (!response.ok) throw new Error('Error al establecer tiempo extra');
-        alert('Tiempo extra establecido correctamente');
-        fetchMatches();
-      } catch (error) {
-        alert(error);
-      }
+        const id = document.getElementById('patchMatchId').value;
+        if (!id) {
+            alert('Por favor ingrese un ID de partido');
+            return;
+        }
+        
+        const minutes = prompt("Minutos de tiempo extra:");
+        if (!minutes) return;
+        
+        try {
+            const response = await fetch(`${apiBaseUrl}/matches/${id}/extratime`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ minutes: parseInt(minutes) })
+            });
+            if (!response.ok) throw new Error(await response.text());
+            alert(`Tiempo extra establecido a ${minutes} minutos`);
+            fetchMatches();
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
     }
   </script>
 </body>
