@@ -1,0 +1,4 @@
+# .dockerignore
+data/db/       # Excluye la carpeta problemática
+.git/          # Excluye metadata de Git
+.gitignore     # Excluye tu archivo gitignore (opcional)
